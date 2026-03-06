@@ -15,6 +15,8 @@ DEFAULT_SETTINGS = {
     "preset": DEFAULT_PRESET,
     "auto_start": False,
     "window_geometry": None,  # saved as [x, y, width, height]
+    "base_volume": None,      # user's master volume (None = use system current)
+    "muted": False,
     **PRESETS[DEFAULT_PRESET],
 }
 

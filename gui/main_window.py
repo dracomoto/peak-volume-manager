@@ -6,7 +6,7 @@ Primary application window with meters, graph, controls, and tray integration.
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QCheckBox, QLabel, QGroupBox, QStatusBar, QApplication,
+    QCheckBox, QLabel, QGroupBox, QStatusBar, QApplication, QSlider,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtGui import QFont, QPalette, QColor
@@ -62,7 +62,6 @@ class MainWindow(QMainWindow):
 
         if not is_dark:
             # Force dark theme for a media-friendly look
-            # (can be changed to follow system if preferred)
             dark_palette = QPalette()
             dark_palette.setColor(QPalette.ColorRole.Window, QColor("#2b2b2b"))
             dark_palette.setColor(QPalette.ColorRole.WindowText, QColor("#e0e0e0"))
@@ -165,6 +164,42 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(meters_group)
 
+        # === Volume Control ===
+        volume_group = QGroupBox("Master Volume")
+        volume_layout = QHBoxLayout(volume_group)
+        volume_layout.setSpacing(8)
+
+        # Mute button
+        self._mute_btn = QPushButton("🔊")
+        self._mute_btn.setFixedSize(36, 36)
+        self._mute_btn.setCheckable(True)
+        self._mute_btn.setStyleSheet("""
+            QPushButton { font-size: 16px; border-radius: 4px; padding: 0px; }
+            QPushButton:checked { background-color: #F44336; }
+        """)
+        self._mute_btn.clicked.connect(self._on_mute_toggled)
+        volume_layout.addWidget(self._mute_btn)
+
+        # Volume slider (0-100)
+        self._volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._volume_slider.setMinimum(0)
+        self._volume_slider.setMaximum(100)
+        self._volume_slider.setValue(100)
+        self._volume_slider.setTickPosition(QSlider.TickPosition.NoTicks)
+        self._volume_slider.valueChanged.connect(self._on_volume_changed)
+        volume_layout.addWidget(self._volume_slider, stretch=1)
+
+        # Volume percentage readout
+        self._volume_readout = QLabel("100%")
+        self._volume_readout.setFixedWidth(50)
+        self._volume_readout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        readout_font = QFont("Consolas", 10)
+        readout_font.setBold(True)
+        self._volume_readout.setFont(readout_font)
+        volume_layout.addWidget(self._volume_readout)
+
+        main_layout.addWidget(volume_group)
+
         # === Level history graph ===
         self._graph = LevelGraph(history_seconds=10.0, updates_per_second=20.0)
         main_layout.addWidget(self._graph)
@@ -226,6 +261,21 @@ class MainWindow(QMainWindow):
         # Auto-start
         self._autostart_cb.setChecked(s.get("auto_start", False))
 
+        # Volume control
+        base_vol = s.get("base_volume", None)
+        if base_vol is not None:
+            vol_pct = int(base_vol * 100)
+            self._volume_slider.setValue(vol_pct)
+            self.volume_controller.set_base_volume(base_vol)
+        else:
+            # First run: capture current system volume as the base
+            current = self.volume_controller.get_current_volume()
+            self._volume_slider.setValue(int(current * 100))
+
+        muted = s.get("muted", False)
+        self._mute_btn.setChecked(muted)
+        self._on_mute_toggled()
+
         # Window geometry
         geom = s.get("window_geometry")
         if geom and len(geom) == 4:
@@ -238,6 +288,8 @@ class MainWindow(QMainWindow):
         self.settings["enabled"] = self._enable_btn.isChecked()
         self.settings["preset"] = self._controls.get_preset()
         self.settings["auto_start"] = self._autostart_cb.isChecked()
+        self.settings["base_volume"] = self._volume_slider.value() / 100.0
+        self.settings["muted"] = self._mute_btn.isChecked()
         geom = self.geometry()
         self.settings["window_geometry"] = [geom.x(), geom.y(), geom.width(), geom.height()]
 
@@ -263,14 +315,17 @@ class MainWindow(QMainWindow):
             self.volume_controller.apply_scalar(r["target_volume_scalar"])
 
         # Status bar
+        vol_pct = self._volume_slider.value()
         reduction = r["gain_reduction_db"]
-        if reduction < -0.5:
+        if self._mute_btn.isChecked():
+            self._statusbar.showMessage(f"MUTED | Volume: {vol_pct}%")
+        elif reduction < -0.5:
             self._statusbar.showMessage(
                 f"Compressing: {reduction:+.1f} dB reduction | "
-                f"Volume: {r['target_volume_scalar']:.0%}"
+                f"Volume: {vol_pct}% | Scale: {r['target_volume_scalar']:.0%}"
             )
         else:
-            self._statusbar.showMessage("Monitoring — no reduction active")
+            self._statusbar.showMessage(f"Monitoring — no reduction active | Volume: {vol_pct}%")
 
     @pyqtSlot()
     def _on_enable_toggled(self):
@@ -318,6 +373,44 @@ class MainWindow(QMainWindow):
         self._save_settings()
         # Actual Windows startup registration would go here:
         # Add/remove shortcut in shell:startup folder
+
+    @pyqtSlot(int)
+    def _on_volume_changed(self, value: int):
+        """Volume slider was moved."""
+        volume = value / 100.0
+        self._volume_readout.setText(f"{value}%")
+        self.volume_controller.set_base_volume(volume)
+
+        # Update mute button icon based on level
+        if not self._mute_btn.isChecked():
+            if value == 0:
+                self._mute_btn.setText("🔇")
+            elif value < 33:
+                self._mute_btn.setText("🔈")
+            elif value < 66:
+                self._mute_btn.setText("🔉")
+            else:
+                self._mute_btn.setText("🔊")
+
+        self._save_settings()
+
+    @pyqtSlot()
+    def _on_mute_toggled(self):
+        """Mute button was clicked."""
+        muted = self._mute_btn.isChecked()
+        self.volume_controller.set_muted(muted)
+
+        if muted:
+            self._mute_btn.setText("🔇")
+            self._volume_slider.setEnabled(False)
+            self._volume_readout.setStyleSheet("color: #666666;")
+        else:
+            self._volume_slider.setEnabled(True)
+            self._volume_readout.setStyleSheet("")
+            # Restore icon based on current level
+            self._on_volume_changed(self._volume_slider.value())
+
+        self._save_settings()
 
     def _minimize_to_tray(self):
         """Hide window and show tray icon."""

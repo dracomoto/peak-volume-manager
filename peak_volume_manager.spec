@@ -3,22 +3,39 @@
 PyInstaller spec file for Peak Volume Manager.
 
 Usage:
-    pyinstaller peak_volume_manager.spec --noconfirm
+    python -m PyInstaller peak_volume_manager.spec --noconfirm
 
-Expects the standard gui/ subfolder layout:
-    gui/main_window.py, gui/meters.py, gui/graph.py, gui/controls.py, gui/tray.py
+Handles both project layouts automatically:
+  - gui/ subfolder (standard):  gui/main_window.py, gui/meters.py, ...
+  - flat (all in root):         main_window.py, meters.py, ...
 """
 
 import os
 import sys
+import glob
 
 block_cipher = None
 
 # Use SPECPATH so this works regardless of where PyInstaller is invoked from
 PROJECT_ROOT = SPECPATH
+GUI_DIR = os.path.join(PROJECT_ROOT, 'gui')
 ASSETS_DIR = os.path.join(PROJECT_ROOT, 'assets')
 
-# --- Hidden imports: all app modules must be listed ---
+# --- Detect project layout ---
+has_gui_folder = os.path.isdir(GUI_DIR) and os.path.exists(os.path.join(GUI_DIR, 'main_window.py'))
+
+# --- Collect data files ---
+datas = []
+if has_gui_folder:
+    # Standard layout: include the gui/ package
+    gui_files = glob.glob(os.path.join(GUI_DIR, '*.py'))
+    if gui_files:
+        datas.append((os.path.join(GUI_DIR, '*.py'), 'gui'))
+    init_file = os.path.join(GUI_DIR, '__init__.py')
+    if os.path.exists(init_file):
+        datas.append((init_file, 'gui'))
+
+# --- Build hidden imports list ---
 hiddenimports = [
     # PyQt6 plugins needed at runtime
     'PyQt6.QtWidgets',
@@ -47,22 +64,35 @@ hiddenimports = [
     'numpy',
     'numpy.core._methods',
     'numpy.lib.format',
-    # App modules (root level)
+    # App modules
     'audio_monitor',
     'compressor',
     'volume_controller',
     'presets',
     'settings',
-    # App modules (gui package)
-    'gui',
-    'gui.main_window',
-    'gui.meters',
-    'gui.graph',
-    'gui.controls',
-    'gui.tray',
 ]
 
-# --- Icon and version info ---
+# Add gui module imports if gui/ folder exists
+if has_gui_folder:
+    hiddenimports += [
+        'gui',
+        'gui.main_window',
+        'gui.meters',
+        'gui.graph',
+        'gui.controls',
+        'gui.tray',
+    ]
+else:
+    # Flat layout: modules are at root level
+    hiddenimports += [
+        'main_window',
+        'meters',
+        'graph',
+        'controls',
+        'tray',
+    ]
+
+# --- Icon and version info (relative to spec file location) ---
 icon_path = os.path.join(ASSETS_DIR, 'icon.ico')
 icon_file = icon_path if os.path.exists(icon_path) else None
 
@@ -74,7 +104,7 @@ a = Analysis(
     [os.path.join(PROJECT_ROOT, 'main.py')],
     pathex=[PROJECT_ROOT],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -129,5 +159,3 @@ coll = COLLECT(
     upx_exclude=[],
     name='PeakVolumeManager',
 )
-
-
