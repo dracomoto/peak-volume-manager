@@ -1,0 +1,38 @@
+# UTF-8
+#
+# Version info resource for Peak Volume Manager
+# Used by PyInstaller to embed version metadata in the .exe
+#
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,          # VOS_NT_WINDOWS32
+    fileType=0x1,        # VFT_APP
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '040904B0',    # US English, Unicode
+          [
+            StringStruct('CompanyName', 'PeakVolumeManager'),
+            StringStruct('FileDescription', 'Peak Volume Manager - Real-time Audio Compressor'),
+            StringStruct('FileVersion', '1.0.0.0'),
+            StringStruct('InternalName', 'PeakVolumeManager'),
+            StringStruct('LegalCopyright', 'Copyright (c) 2026 PeakVolumeManager'),
+            StringStruct('OriginalFilename', 'PeakVolumeManager.exe'),
+            StringStruct('ProductName', 'Peak Volume Manager'),
+            StringStruct('ProductVersion', '1.0.0.0'),
+          ],
+        ),
+      ],
+    ),
+    VarFileInfo([VarStruct('Translation', [0x0409, 0x04B0])]),
+  ],
+)
