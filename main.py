@@ -59,12 +59,11 @@ def main():
     window = MainWindow(audio_monitor, vol_controller, settings)
 
     # Connect audio monitor callback to window
-    # (thread-safe: the window reads _latest_result on its own timer)
+    # The GUI timer in MainWindow handles volume application at 20fps.
+    # We do NOT apply volume here — doing so from both the audio thread
+    # and the GUI timer causes a race condition that fights the volume slider.
     def on_audio_data(result):
         window.set_audio_callback_result(result)
-        # Also apply volume in real-time from the audio thread
-        if settings.get("enabled", True):
-            vol_controller.apply_scalar(result["target_volume_scalar"])
 
     audio_monitor.callback = on_audio_data
 

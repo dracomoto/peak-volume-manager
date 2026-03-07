@@ -6,6 +6,7 @@ Falls back to a no-op controller on non-Windows systems.
 
 import threading
 import platform
+import time
 
 
 class VolumeController:
@@ -21,6 +22,7 @@ class VolumeController:
         self._muted = False
         self._interface = None
         self._available = False
+        self._last_log_time = 0       # throttle debug output
         self._init_audio_interface()
 
     def _init_audio_interface(self):
@@ -113,6 +115,13 @@ class VolumeController:
         """Internal: set the actual system volume from base * scalar."""
         target = self._base_volume * min(self._current_scalar, 1.0)
         target = max(0.0, min(1.0, target))
+
+        # Debug logging (throttled to once per second)
+        now = time.time()
+        if now - self._last_log_time > 1.0:
+            if self._current_scalar < 0.99:
+                print(f"  [Volume] base={self._base_volume:.0%} × scalar={self._current_scalar:.2f} → target={target:.0%}")
+            self._last_log_time = now
 
         if not self._available:
             return

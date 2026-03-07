@@ -18,11 +18,11 @@ class Compressor:
         self.sample_rate = sample_rate
 
         # Parameters (set via update_params)
-        self.threshold = -24.0   # dB
+        self.threshold = -20.0   # dB
         self.ratio = 4.0         # :1
         self.attack = 3.0        # ms
         self.release = 250.0     # ms
-        self.knee = 20.0         # dB
+        self.knee = 10.0         # dB
         self.ceiling = -3.0      # dB
         self.output_gain = 0.0   # dB
 
