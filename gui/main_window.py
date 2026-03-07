@@ -310,15 +310,19 @@ class MainWindow(QMainWindow):
         # Update graph
         self._graph.add_data(r["input_peak_db"], r["output_db"], r["gain_reduction_db"])
 
-        # Apply volume control
+        # Apply volume control — only when compression is enabled
         if self._enable_btn.isChecked():
             self.volume_controller.apply_scalar(r["target_volume_scalar"])
+        # When disabled, scalar stays at 1.0 (set by _on_enable_toggled)
+        # so the volume slider controls system volume directly.
 
         # Status bar
         vol_pct = self._volume_slider.value()
         reduction = r["gain_reduction_db"]
         if self._mute_btn.isChecked():
             self._statusbar.showMessage(f"MUTED | Volume: {vol_pct}%")
+        elif not self._enable_btn.isChecked():
+            self._statusbar.showMessage(f"Compression OFF | Volume: {vol_pct}%")
         elif reduction < -0.5:
             self._statusbar.showMessage(
                 f"Compressing: {reduction:+.1f} dB reduction | "
@@ -339,10 +343,12 @@ class MainWindow(QMainWindow):
             self._enable_btn.setText("○ DISABLED")
             self._enable_btn.setStyleSheet("background-color: #F44336; color: white;")
             self._status_label.setText("Compression bypassed")
-            self.volume_controller.restore()
+            # Restore volume to base level immediately
+            self.volume_controller.apply_scalar(1.0)
 
         self.audio_monitor.set_enabled(enabled)
         self._tray.set_enabled(enabled)
+        self._save_settings()
 
     @pyqtSlot(str, float)
     def _on_param_changed(self, param_name: str, value: float):
