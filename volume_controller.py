@@ -33,13 +33,31 @@ class VolumeController:
             return
 
         try:
-            from ctypes import cast, POINTER
-            from comtypes import CLSCTX_ALL
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+            from pycaw.pycaw import AudioUtilities
 
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            self._interface = cast(interface, POINTER(IAudioEndpointVolume))
+            speakers = AudioUtilities.GetSpeakers()
+
+            # New pycaw (2024+) returns an AudioDevice wrapper object
+            # with an EndpointVolume property that handles Activate() internally.
+            # Old pycaw returned a raw COM IMMDevice with an Activate() method.
+            if hasattr(speakers, 'EndpointVolume'):
+                # New API — use the convenience property
+                self._interface = speakers.EndpointVolume
+                print("VolumeController: Using new pycaw API (EndpointVolume property)")
+            elif hasattr(speakers, 'Activate'):
+                # Old API — do manual Activate + cast
+                from ctypes import cast, POINTER
+                from comtypes import CLSCTX_ALL
+                from pycaw.pycaw import IAudioEndpointVolume
+                interface = speakers.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                self._interface = cast(interface, POINTER(IAudioEndpointVolume))
+                print("VolumeController: Using legacy pycaw API (Activate + cast)")
+            else:
+                raise RuntimeError(
+                    f"Unrecognized pycaw speaker object: {type(speakers)}. "
+                    f"Attributes: {[a for a in dir(speakers) if not a.startswith('_')]}"
+                )
+
             self._base_volume = self._interface.GetMasterVolumeLevelScalar()
             self._available = True
             print(f"VolumeController: Connected. Current volume: {self._base_volume:.0%}")
@@ -120,7 +138,7 @@ class VolumeController:
         now = time.time()
         if now - self._last_log_time > 1.0:
             if self._current_scalar < 0.99:
-                print(f"  [Volume] base={self._base_volume:.0%} × scalar={self._current_scalar:.2f} → target={target:.0%}")
+                print(f"  [Volume] base={self._base_volume:.0%} x scalar={self._current_scalar:.2f} -> target={target:.0%}")
             self._last_log_time = now
 
         if not self._available:
